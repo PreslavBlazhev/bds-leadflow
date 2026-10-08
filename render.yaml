@@ -1,0 +1,115 @@
+# Render Blueprint — BDS LeadFlow (web + Background Worker + PostgreSQL, всичко във frankfurt).
+# Проверено локално срещу официалната JSON schema https://render.com/schema/render.yaml.json (виж docs/RENDER-SETUP.md).
+# В този етап НЕ е създаден нито един Render ресурс. Плановете са платени: web/worker 0.5c-512mb, база 0.1c-256mb
+# (preDeployCommand изисква платена услуга; безплатната база изтича).
+#
+# Тайни: само `sync: false` — Render ги пита при първото създаване на Blueprint-а; стойностите не са в Git.
+# Общите стойности за web и worker са в env групата `leadflow-shared` (ЕДНА стойност за двете услуги).
+# Не използвай `generateValue` за общи тайни: всяка услуга би получила РАЗЛИЧНА генерирана стойност.
+#
+# Production gates (SCHEDULER_ENABLED, DELIVERIES_ENABLED) са "false" до проверен cutover — docs/CUTOVER-AND-ROLLBACK.md.
+
+envVarGroups:
+  - name: leadflow-shared
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_MODE
+        value: real
+      # Canonical HTTPS адрес (само origin, без път), напр. https://bds-leadflow-web.onrender.com или собствен домейн.
+      - key: APP_BASE_URL
+        sync: false
+      # Публичен по предназначение VAPID ключ — ЕДНАКЪВ в web (абониране) и worker (изпращане).
+      - key: NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        sync: false
+      - key: DELIVERIES_ENABLED
+        value: "false"
+      - key: NOTIFY_DRY_RUN
+        value: "false"
+      - key: WORKER_STALE_SECONDS
+        value: "180"
+
+services:
+  - type: web
+    name: bds-leadflow-web
+    runtime: node
+    plan: 0.5c-512mb
+    region: frankfurt
+    branch: main
+    # Node версията идва от .node-version (24.21.0). devDependencies са нужни за next build (TypeScript, Tailwind).
+    buildCommand: npm ci --include=dev && npm run build
+    # Една стъпка за schema миграциите преди новата версия да поеме трафика (само migrate deploy; никога dev/reset, никога CRM данни).
+    preDeployCommand: npm run db:deploy
+    startCommand: npm run start:web
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - fromGroup: leadflow-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bds-leadflow-db
+          property: connectionString
+      # Render добавя точно един X-Forwarded-For hop пред услугата.
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      - key: SESSION_TTL_HOURS
+        value: "168"
+      # Допълнителни разрешени Origin стойности (напр. собствен домейн + onrender адреса), CSV; празно = само APP_BASE_URL.
+      - key: ALLOWED_ORIGINS
+        sync: false
+      # Една реална тестова доставка от Настройки (неутрален текст) — включва се за кратко при live теста.
+      - key: ALLOW_REAL_TEST_DELIVERY
+        value: "false"
+
+  - type: worker
+    name: bds-leadflow-worker
+    runtime: node
+    plan: 0.5c-512mb
+    region: frankfurt
+    branch: main
+    # tsx (devDependency) изпълнява worker-а; Prisma клиентите се генерират в postinstall.
+    buildCommand: npm ci --include=dev
+    startCommand: npm run worker:start
+    autoDeployTrigger: checksPass
+    # Worker-ът изчаква текущия tick до 25 s и освобождава lease-овете.
+    maxShutdownDelaySeconds: 60
+    envVars:
+      - fromGroup: leadflow-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bds-leadflow-db
+          property: connectionString
+      - key: SCHEDULER_ENABLED
+        value: "false"
+      - key: WORKER_TICK_SECONDS
+        value: "30"
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: OWNER_NOTIFY_EMAIL
+        sync: false
+
+databases:
+  - name: bds-leadflow-db
+    plan: 0.1c-256mb
+    region: frankfurt
+    postgresMajorVersion: "18"
+    databaseName: bds_leadflow
+    user: bds_leadflow
+    diskSizeGB: 5
+    # Само вътрешни връзки от услугите. За еднократния импорт при cutover временно се добавя твоят IP (docs/CUTOVER-AND-ROLLBACK.md).
+    ipAllowList: []

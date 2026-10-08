@@ -1,0 +1,84 @@
+# CI за частното GitHub хранилище: Node 24 + disposable PostgreSQL 18, само синтетични данни.
+# Без production тайни, без реални миграционни export-и, без доставки (DEMO/mock транспорти, NOTIFY без мрежа).
+# Render (autoDeployTrigger: checksPass) deploy-ва само след успешни проверки на main.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: lf_test
+          POSTGRES_PASSWORD: lf_test_ci_only
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U lf_test" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # Тестова среда: demo режим, временни бази; никакви реални ключове.
+      APP_MODE: demo
+      DATABASE_URL: file:../data/ci-demo.db
+      LF_TEST_PG_URL: postgresql://lf_test:lf_test_ci_only@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Clean install (генерира SQLite и PostgreSQL Prisma клиентите)
+        run: npm ci
+      - name: PostgreSQL схемата съвпада с източника
+        run: npm run db:pg:schema:check
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Unit тестове
+        run: npm run test
+      - name: Интеграционни тестове — SQLite
+        run: npm run test:integration
+      - name: Интеграционни тестове — PostgreSQL 18
+        run: npm run test:pg
+      - name: Production build (без DB заявки и без live credentials)
+        run: npm run build
+        env:
+          APP_ENV: local
+      - name: render.yaml срещу официалната schema
+        run: |
+          npm install --prefix .tools/validate --no-audit --no-fund ajv@8 ajv-formats@3 js-yaml@4
+          curl -fsSL https://render.com/schema/render.yaml.json -o .tools/render-schema.json
+          node scripts/validate-render-yaml.mjs
+
+  e2e:
+    runs-on: ubuntu-24.04
+    needs: checks
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - name: E2E (production build + Playwright с Google Chrome на runner-а, отделна e2e база)
+        run: npm run test:e2e
+      - name: Логове при провал
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-runs
+          path: tests/.tmp/e2e-runs/
+          retention-days: 7

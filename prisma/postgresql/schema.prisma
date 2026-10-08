@@ -1,0 +1,572 @@
+// ГЕНЕРИРАН ФАЙЛ — не редактирай. Източник: prisma/schema.prisma; команда: npm run db:pg:schema
+// PostgreSQL схема за production. Миграции: prisma/postgresql/migrations (отделна история от SQLite).
+
+generator client {
+  provider      = "prisma-client-js"
+  // Отделен клиент за PostgreSQL; зарежда се по време на изпълнение от src/lib/prismaClients.ts.
+  output        = "../../node_modules/.prisma-pg/client"
+  binaryTargets = ["native"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Един ред. Fail-closed защита: режимът на DB файла се записва при създаване и трябва да съвпада с APP_MODE.
+model SystemMeta {
+  id        Int      @id @default(1)
+  mode      String // "demo" | "real"
+  createdAt DateTime @default(now())
+  demoDayOffset Int  @default(0) // само demo: симулиран "следващ ден"; в real винаги 0
+  /// Пренос между бази (SQLite → PostgreSQL): sha256 на архива и момент на импорта. null = базата не е пренесена.
+  migratedFromArchive String?
+  migratedAt          DateTime?
+}
+
+model User {
+  id           String    @id @default(cuid())
+  ownerSlot    Int       @unique @default(1) // гарантира един owner
+  username     String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+}
+
+model Session {
+  id         String   @id // sha256(token); суровият token е само в HttpOnly cookie
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id      String   @id @default(cuid())
+  key     String // "u:<username>" или "ip:<ip>"
+  success Boolean
+  at      DateTime @default(now())
+
+  @@index([key, at])
+}
+
+/// Каноничен бизнес / lead. id = вътрешен Lead ID; canonical = mergedIntoId ?? id.
+model Business {
+  id                  String    @id @default(cuid())
+  ref                 String    @unique // кратък четим номер, напр. L-000123
+  name                String
+  legalName           String?
+  normalizedName      String
+  city                String
+  address             String?
+  category            String
+  phoneRaw            String?
+  phoneNormalized     String?
+  phoneKind           String? // E164 | DEMO_SYNTHETIC | INVALID
+  phoneVerified       Boolean   @default(false)
+  email               String?
+  website             String?
+  websiteDomain       String?
+  socialUrl           String?
+  socialActive        Boolean? // null = неизвестно
+  mapsUrl             String?
+  contactPersonName   String?
+  contactPersonRole   String?
+  contactPersonSource String?
+  eik                 String?
+  rating              Float? // само ако източникът позволява съхранение
+  reviewCount         Int?
+  ratingSource        String?
+  websiteStatus       String    @default("UNCHECKED") // UNCHECKED | FOUND | NOT_FOUND_AFTER_CHECK | UNREACHABLE
+  isChain             Boolean? // null = неизвестно
+  pipelineStage       String    @default("NEW")
+  lastOutcome         String?
+  lastContactAt       DateTime?
+  nextAction          String?
+  nextActionAt        DateTime?
+  firstIssuedAt       DateTime?
+  contactHistoryState String    @default("UNKNOWN") // NONE_CONFIRMED | HAS_HISTORY | UNKNOWN
+  reviewStatus        String    @default("NONE") // NONE | DUPLICATE_REVIEW | NEEDS_CHECK
+  reviewReason        String?
+  status              String    @default("ACTIVE") // ACTIVE | ARCHIVED | CLOSED
+  archivedAt          DateTime?
+  archivedReason      String?
+  source              String // DEMO | CSV | XLSX | MANUAL | GOOGLE_PLACES | B2B
+  sourceRef           String?
+  sourceUrl           String?
+  sourceUsageConfirmed Boolean  @default(false) // имам право да използвам/съхранявам тези данни
+  fetchedAt           DateTime?
+  verifiedAt          DateTime?
+  confidence          Float?
+  isDemo              Boolean   @default(false)
+  mergedIntoId        String?
+  mergedInto          Business?  @relation("Merge", fields: [mergedIntoId], references: [id])
+  mergedChildren      Business[] @relation("Merge")
+  score               Int? // последна изчислена оценка (кеш за филтриране; разбивката е в ScoreEvaluation)
+  scoreAt             DateTime?
+  suggestedService    String?
+  estimatedValueCents Int?
+  openingLine         String?
+  questions           String?
+  notes               String?
+  // --- Импорт от файл (напр. Excel проучване). Наблюдения от източника, не проверки на приложението. ---
+  sourceCategory      String? // оригинална „Основна категория“
+  subcategory         String?
+  district            String? // квартал/район
+  phone2Raw           String?
+  phone2Normalized    String?
+  openingHours        String?
+  websiteObservation  String? // дословно наблюдение, напр. „Няма открит собствен сайт“ (не е категорично „няма сайт“)
+  facebookUrl         String?
+  instagramUrl        String?
+  otherProfileUrl     String?
+  recentReviewNote    String? // напр. „Преди 5 месеца (видим отзив)“
+  sourceCheckedOn     String? // дата на проверката в източника, YYYY-MM-DD (≠ дата на импорта)
+  confidenceLabel     String? // „Средна“ и т.н., както е в източника
+  callPriority        String? // A | B (от източника)
+  sourceName          String? // име на файла
+  sourceSheet         String?
+  sourceRowNo         Int? // оригинален „Пореден номер“ (не физически ред)
+  importedAt          DateTime?
+  /// История преди импорта, потвърдена от собственика (без измислени дата/резултат):
+  /// CALLED_BEFORE_IMPORT = „Прозвънен преди импорта — резултатът е неизвестен“; NOT_CALLED = „Още не е звъняно“.
+  priorContact        String?
+  priorContactSource  String? // OWNER_CONFIRMATION
+  priorContactNote    String?
+  priorContactRecordedAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  identifiers     BusinessIdentifier[]
+  evidence        SourceEvidence[]
+  audits          WebsiteAudit[]
+  reviews         BusinessReview[]
+  scores          ScoreEvaluation[]
+  activities      Activity[]
+  pipelineHistory PipelineHistory[]
+  batchItem       DailyBatchItem?
+  followUps       FollowUp[]
+  offers          Offer[]
+  client          Client?
+  suppressions    Suppression[]
+  dupesA          DuplicateCandidate[] @relation("DupA")
+  dupesB          DuplicateCandidate[] @relation("DupB")
+
+  @@index([city, category])
+  @@index([pipelineStage])
+  @@index([status])
+  @@index([normalizedName, city])
+  @@index([sourceName, sourceSheet, sourceRowNo])
+}
+
+/// История на идентификаторите (aliases). Не е unique — общ телефон между клонове е валидно състояние за review.
+model BusinessIdentifier {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  type       String // PHONE | DEMO_PHONE | DOMAIN | PLACE_ID | EIK | NAME_CITY | PROVIDER_ID
+  value      String
+  isPrimary  Boolean  @default(false)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@unique([businessId, type, value])
+  @@index([type, value])
+}
+
+model DuplicateCandidate {
+  id          String    @id @default(cuid())
+  businessAId String
+  businessA   Business  @relation("DupA", fields: [businessAId], references: [id], onDelete: Cascade)
+  businessBId String
+  businessB   Business  @relation("DupB", fields: [businessBId], references: [id], onDelete: Cascade)
+  matchType   String
+  matchValue  String
+  status      String    @default("OPEN") // OPEN | MERGED | DISTINCT
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([businessAId, businessBId, matchType])
+}
+
+model SourceEvidence {
+  id                String    @id @default(cuid())
+  businessId        String
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  provider          String
+  field             String
+  sourceUrl         String?
+  fetchedAt         DateTime
+  verifiedAt        DateTime?
+  storageAllowed    Boolean
+  derivedUseAllowed Boolean
+  expiresAt         DateTime?
+  note              String?
+  synthetic         Boolean   @default(false)
+}
+
+model WebsiteAudit {
+  id           String   @id @default(cuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  checkedAt    DateTime
+  url          String?
+  result       String // REACHABLE | UNREACHABLE | NOT_FOUND | BLOCKED
+  https        Boolean?
+  hasViewport  Boolean?
+  contactVisible Boolean?
+  poorMobile   Boolean? // само при потвърдено
+  strongModern Boolean?
+  issues       String   @default("[]") // JSON масив от наблюдавани проблеми
+  evidence     String
+  synthetic    Boolean  @default(false)
+}
+
+model BusinessReview {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  source     String
+  author     String
+  reviewDate String?
+  url        String?
+  text       String
+  rating     Int?
+  isDemo     Boolean  @default(false)
+}
+
+model ScoreEvaluation {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  ruleVersion String
+  score       Int
+  breakdown   String // JSON — само допустими за съхранение производни
+  computedAt  DateTime @default(now())
+
+  @@index([businessId, computedAt])
+}
+
+model Activity {
+  id             String   @id @default(cuid())
+  businessId     String
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  type           String // CALL | CONTACT_OTHER | NOTE | MEETING | STATUS_CHANGE | DIAL_INTENT | IMPORTED_HISTORY | OFFER | SYSTEM
+  outcome        String?
+  callConnected  Boolean?
+  note           String?
+  occurredAt     DateTime @default(now())
+  idempotencyKey String?  @unique
+  createdAt      DateTime @default(now())
+  followUps      FollowUp[]
+
+  @@index([businessId, occurredAt])
+  @@index([type, occurredAt])
+}
+
+model PipelineHistory {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  fromStage  String
+  toStage    String
+  reason     String?
+  activityId String?
+  at         DateTime @default(now())
+}
+
+model DailyBatch {
+  id              String    @id @default(cuid())
+  localDate       String    @unique // един batch на local business date
+  status          String    @default("PUBLISHED")
+  target          Int
+  scheduledAt     DateTime
+  publishedAt     DateTime?
+  late            Boolean   @default(false)
+  shortfallReason String?
+  quotaPlan       String    @default("{}")
+  createdAt       DateTime  @default(now())
+  items           DailyBatchItem[]
+}
+
+/// Ledger на новите разпределения. businessId е UNIQUE → бизнес може да бъде "нов" само веднъж в живота си.
+model DailyBatchItem {
+  id          String     @id @default(cuid())
+  batchId     String
+  batch       DailyBatch @relation(fields: [batchId], references: [id])
+  businessId  String     @unique
+  business    Business   @relation(fields: [businessId], references: [id])
+  position    Int
+  bucket      String
+  scoreAtIssue Int
+  reason      String
+  issuedAt    DateTime
+  /// Устойчиво „обработен за този списък“: първият успешно записан резултат (един от деветте) след издаването.
+  /// Не се връща назад от по-късни CRM промени — приключен списък остава приключен.
+  processedAt         DateTime?
+  processedOutcome    String?
+  processedActivityId String?
+
+  @@unique([batchId, position])
+  @@index([processedAt])
+}
+
+model FollowUp {
+  id              String    @id @default(cuid())
+  businessId      String
+  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  activityId      String?
+  activity        Activity? @relation(fields: [activityId], references: [id])
+  offerId         String?
+  offer           Offer?    @relation(fields: [offerId], references: [id])
+  kind            String // RETRY | CALL_BACK | OFFER | NEXT_STEP | GENERAL
+  dueAt           DateTime
+  reason          String
+  note            String?
+  status          String    @default("OPEN") // OPEN | DONE | CANCELLED
+  completedAt     DateTime?
+  cancelledReason String?
+  createdAt       DateTime  @default(now())
+
+  @@index([status, dueAt])
+}
+
+model Offer {
+  id           String    @id @default(cuid())
+  businessId   String
+  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  service      String
+  oneTimeCents Int
+  monthlyCents Int?
+  description  String    @default("")
+  offerDate    String // localDate
+  validUntil   String?
+  notes        String?
+  status       String    @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED
+  nextStep     String?
+  sentAt       DateTime?
+  decidedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  followUps    FollowUp[]
+  client       Client?
+}
+
+model Client {
+  id                 String    @id @default(cuid())
+  businessId         String    @unique
+  business           Business  @relation(fields: [businessId], references: [id])
+  offerId            String?   @unique
+  offer              Offer?    @relation(fields: [offerId], references: [id])
+  service            String
+  agreedOneTimeCents Int
+  monthlyCents       Int?
+  startDate          String
+  endDate            String?
+  status             String    @default("ACTIVE") // ACTIVE | PAUSED | ENDED
+  nextAction         String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  payments           ReceivedPayment[]
+}
+
+model ReceivedPayment {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  amountCents Int
+  receivedOn  String
+  note        String?
+  idempotencyKey String? @unique
+  createdAt   DateTime @default(now())
+}
+
+model Suppression {
+  id              String    @id @default(cuid())
+  type            String // DNC | INVALID_PHONE
+  businessId      String?
+  business        Business? @relation(fields: [businessId], references: [id])
+  identifierType  String?
+  identifierValue String?
+  reason          String
+  createdAt       DateTime  @default(now())
+  liftedAt        DateTime?
+  liftedReason    String?
+
+  @@index([identifierType, identifierValue])
+  @@index([businessId])
+}
+
+model AppSettings {
+  id        Int      @id @default(1)
+  data      String // JSON, валидиран със Zod (src/domain/settings.ts)
+  updatedAt DateTime @updatedAt
+}
+
+model PushSubscription {
+  id            String    @id @default(cuid())
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  label         String?
+  createdAt     DateTime  @default(now())
+  lastSuccessAt DateTime?
+  lastFailureAt DateTime?
+  failureCount  Int       @default(0)
+  revokedAt     DateTime?
+  expiredAt     DateTime?
+}
+
+model NotificationOutbox {
+  id                String    @id @default(cuid())
+  dedupeKey         String    @unique
+  channel           String // PUSH | EMAIL
+  kind              String // DAILY_READY | FALLBACK_EMAIL | TEST_PUSH | TEST_EMAIL
+  localDate         String?
+  batchId           String?
+  payload           String // JSON без CRM лични данни
+  status            String    @default("queued") // queued | processing | provider_accepted | failed | retry_scheduled | simulated | acknowledged | skipped
+  attempts          Int       @default(0)
+  notBefore         DateTime
+  leaseUntil        DateTime?
+  lastError         String?
+  providerMessageId String?
+  /// Push: sha256 на еднократен token в payload-а; service worker-ът го връща след showNotification (разписка).
+  receiptTokenHash  String?
+  /// „обработено от service worker“ (showNotification е изпълнен на устройство) — НЕ е доказателство, че owner го е видял.
+  swReceivedAt      DateTime?
+  /// „отворено от owner“ — натиснато известие (notificationclick).
+  openedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deliveries        DeliveryAttempt[]
+
+  @@index([status, notBefore])
+}
+
+model DeliveryAttempt {
+  id             String             @id @default(cuid())
+  outboxId       String
+  outbox         NotificationOutbox @relation(fields: [outboxId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  at             DateTime           @default(now())
+  result         String // provider_accepted | failed | expired | simulated
+  statusCode     Int?
+  error          String?
+}
+
+model DailyAcknowledgement {
+  id        String   @id @default(cuid())
+  localDate String   @unique
+  at        DateTime @default(now())
+  via       String
+}
+
+/// Състояние на worker процесите (heartbeat). Един ред на стартиран процес; health показва най-новия.
+model WorkerHeartbeat {
+  id                String    @id // worker-<pid>-<random>
+  host              String?
+  version           String?
+  startedAt         DateTime
+  beatAt            DateTime
+  /// starting | waiting_schema | ready | scheduler_disabled | stopping | stopped | error
+  state             String
+  schemaOk          Boolean   @default(false)
+  schedulerEnabled  Boolean   @default(false)
+  deliveriesEnabled Boolean   @default(false)
+  lastSuccessAt     DateTime?
+  nextCheckAt       DateTime?
+  lastError         String?
+  lastErrorAt       DateTime?
+  stoppedAt         DateTime?
+
+  @@index([beatAt])
+}
+
+model JobRun {
+  id          String    @id @default(cuid())
+  key         String    @unique // напр. publish:2026-10-07
+  type        String
+  status      String    @default("running") // running | succeeded | failed | skipped
+  leaseOwner  String?
+  leaseUntil  DateTime?
+  attempts    Int       @default(0)
+  nextRetryAt DateTime?
+  lastError   String?
+  late        Boolean   @default(false)
+  result      String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model ImportBatch {
+  id                  String   @id @default(cuid())
+  filename            String
+  contentHash         String
+  status              String // PREVIEW | COMMITTED
+  counts              String   @default("{}")
+  confirmedUncontacted Boolean @default(false)
+  usageConfirmed      Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  issues              ImportRowIssue[]
+}
+
+model ImportRowIssue {
+  id            String      @id @default(cuid())
+  importBatchId String
+  importBatch   ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  rowNumber     Int
+  kind          String // DUPLICATE | CONFLICT | INVALID | SKIPPED
+  message       String
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  at         DateTime @default(now())
+  actor      String
+  action     String
+  entityType String?
+  entityId   String?
+  details    String   @default("{}")
+
+  @@index([at])
+}
+
+model Counter {
+  name  String @id
+  value Int
+}
+
+/// Пилотно откриване (Google Places, ЕИП): съхранява САМО place_id и моите решения.
+/// Име, адрес, телефон, сайт, рейтинг се зареждат на живо при показване и НЕ се записват (EEA ToS: no caching,
+/// "copy and save business names, addresses, or user reviews" е забранено).
+model PilotCandidate {
+  id          String    @id @default(cuid())
+  placeId     String    @unique
+  city        String
+  category    String
+  query       String
+  status      String    @default("PENDING_REVIEW") // PENDING_REVIEW | APPROVED | REJECTED | SKIPPED | IN_HISTORY | CONVERTED
+  /// Връзка към МОЙ запис (стара история/DNC), ако е открито съвпадение — моите данни, не Google съдържание.
+  matchedBusinessId String?
+  reviewNote  String?
+  businessId  String?   @unique // след разговор: създаден мой CRM запис
+  createdAt   DateTime  @default(now())
+  reviewedAt  DateTime?
+}
+
+/// Брояч на платимите/ограничени заявки към външни API по месец и SKU — бюджетният лимит се прилага в кода.
+model ApiUsage {
+  id     String @id @default(cuid())
+  month  String // YYYY-MM (Europe/Sofia)
+  sku    String // places.text_search_ids | places.details_enterprise
+  count  Int    @default(0)
+
+  @@unique([month, sku])
+}

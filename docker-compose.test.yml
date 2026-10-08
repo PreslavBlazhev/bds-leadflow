@@ -1,0 +1,19 @@
+# Disposable PostgreSQL САМО за локални тестове и пробен пренос (не за production).
+# Същият порт и тестови credentials като scripts/pg-local.mjs (портативният вариант без Docker).
+#   docker compose -f docker-compose.test.yml up -d
+#   docker compose -f docker-compose.test.yml down -v   # изтрива тестовите данни
+# Production базата е Render PostgreSQL (виж render.yaml, docs/RENDER-SETUP.md).
+services:
+  leadflow-pg-test:
+    image: postgres:18
+    container_name: leadflow-pg-test
+    environment:
+      POSTGRES_USER: lf_test
+      POSTGRES_PASSWORD: lf_test_local_only
+      POSTGRES_DB: postgres
+      TZ: UTC
+    ports:
+      - "127.0.0.1:54315:5432"
+    command: ["postgres", "-c", "max_connections=200", "-c", "fsync=off"]
+    tmpfs:
+      - /var/lib/postgresql

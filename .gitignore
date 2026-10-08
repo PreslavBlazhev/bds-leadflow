@@ -1,0 +1,41 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+# Локални тайни и бази — никога в Git
+.env
+.env.*
+!.env.example
+!.env.real.example
+!.env.production.example
+data/
+backups/
+test-results/
+playwright-report/
+tests/.tmp/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Изолирана проверка в чисто копие (виж docs/TEST-REPORT.md)
+.verify/
+
+# Портативни инструменти (Node 24, PostgreSQL) за локални проверки — изтеглени, не са част от кода
+.tools/
+
+# Миграционни export-и, PostgreSQL dump-ове и snapshot-и (съдържат CRM данни)
+*.dump
+*.dump.manifest.json
+archive.json.gz
+*.sql.gz
+
+# Реални входни файлове (Excel/CSV с контакти) — никога в Git; синтетичните fixtures се генерират в тестовете
+*.xlsx
+*.xls
+*.csv
+
+# Логове и trace/video от тестове
+*.log
+playwright/.cache/
