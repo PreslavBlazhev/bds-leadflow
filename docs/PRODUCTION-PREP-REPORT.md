@@ -1,8 +1,8 @@
-# BDS LeadFlow — подготовка за GitHub и Render (отчет A–M)
+# BDS LeadFlow — подготовка за GitHub и Render (отчет A–N)
 
 Дата: 08–09.10.2026. Задание: `C:\Users\The King\Desktop\BDS-LeadFlow-Production-Prompt.md`. Проект: `C:\Users\The King\Desktop\Sites\15. BDS LeadFlow`.
 
-Статуси: **реално проверено локално** · **реализирано, но не проверено на Render/телефон** · **блокирано**. Нищо не е публикувано: няма push, GitHub remote, Render ресурси, DNS, реални доставки, Google Places заявки или контакт с клиенти.
+Статуси: **реално проверено локално** · **реализирано, но не проверено на Render/телефон** · **блокирано**. **Обновено 09.10.2026:** кодът е качен в публичното (потвърден избор на собственика) хранилище https://github.com/PreslavBlazhev/bds-leadflow; GitHub Actions — зелен (виж N). Няма Render ресурси, DNS, реални доставки, Google Places заявки или контакт с клиенти.
 
 ---
 
@@ -16,12 +16,12 @@
 | Всички интеграционни тестове (вкл. активен списък, „Не отговори“, DNC, outbox, конкуренция с отделни процеси) върху PostgreSQL | реално проверено локално — 77 PASS, 1 пропуснат (SQLite-специфичен backup) |
 | Пробен пренос на копие от работната SQLite база → PostgreSQL, независимо сверяване, повторен импорт = 0 промени | реално проверено локално — PASS |
 | Production команди `start:web` + `worker:start` (APP_ENV=production) срещу една PostgreSQL база, нов build + рестарт | реално проверено локално (синтетична база) |
-| Worker: schema readiness, heartbeat в DB, gates, SIGTERM/IPC спиране, backoff при прекъсната DB връзка | реално проверено локално (реален SIGTERM сигнал — само в Linux; виж J) |
+| Worker: schema readiness, heartbeat в DB, gates, SIGTERM/IPC спиране, backoff при прекъсната DB връзка | реално проверено локално; реален SIGTERM — проверен в GitHub Actions (Linux), виж N |
 | Push разписки, правило за резервния имейл, остарели известия, cutover задържане, dry-run на истинските адаптери | реално проверено локално |
 | Production достъп: owner защита, Secure cookie, Origin без Host доверие, proxy IP, liveness/readiness | реално проверено локално (production профил на http://127.0.0.1) |
 | `render.yaml` | валидиран локално срещу официалната schema; на Render — не |
 | PostgreSQL backup/restore | реално проверено локално |
-| GitHub Actions CI | написан; не е изпълнен (няма хранилище в GitHub) |
+| GitHub Actions CI | изпълнен в GitHub — зелен (checks + e2e), виж N |
 | Доставка на push до телефон, реален SMTP | реализирано, но не проверено на Render/телефон |
 | `docker-compose.test.yml` | блокирано: Docker не е инсталиран (не е инсталиран глобално по изискване); използван е портативен PostgreSQL със същия порт и credentials |
 
@@ -142,7 +142,7 @@ GitHub (частно, main) ──CI (checksPass)──▶ Render Blueprint (fra
 | 8–11 | 22/25, ден/рестарт, след 08:00, пт–пн, „Не отговори“ пт→вт, 3 дни, ръчна дата, повторен запис, DNC, свежест | SQLite и PostgreSQL; „Не отговори“ и през production web API | PASS |
 | 12 | Europe/Sofia DST, 07:59/08:00, UTC разминаване | инжектиран часовник | PASS |
 | 13 | Рестарт около публикуване/outbox (T28), временна DB грешка | PostgreSQL | PASS |
-| 13 | SIGTERM на worker | Windows: IPC към същия handler — PASS; **реален POSIX SIGTERM — не е изпълнен** (Windows няма сигнали за дъщерни процеси; ще мине в Linux CI) |
+| 13 | SIGTERM на worker | Windows: IPC към същия handler — PASS; реален POSIX SIGTERM в GitHub Actions (Ubuntu 24.04), SQLite и PostgreSQL — PASS (виж N) |
 | 14 | Mock push/email, 404/410, fallback време, закъсняло публикуване, dry-run без мрежа | SQLite и PostgreSQL | PASS |
 | 15 | Анонимен/owner достъп, Secure cookie, Origin в production профил | curl + тестове + E2E | PASS |
 | 16 | PWA ресурси, deep link `/today`, без кеш на личните API | E2E | PASS; на реален HTTPS origin — не е проверено |
@@ -151,7 +151,7 @@ GitHub (частно, main) ──CI (checksPass)──▶ Render Blueprint (fra
 | — | `node scripts/validate-render-yaml.mjs` | официална schema | PASS (+ отрицателна проба хваща грешни plan/region) |
 | — | `npm run pg:backup` / `pg:restore-check` | PostgreSQL | PASS |
 | — | `docker compose -f docker-compose.test.yml up` | — | BLOCKED (няма Docker) |
-| — | GitHub Actions | — | не е изпълнен (няма хранилище) |
+| — | GitHub Actions | ubuntu-24.04, Node 24.21.0, PostgreSQL 18 | PASS (виж N) |
 
 ## K. Backup, cutover и rollback
 
@@ -163,7 +163,7 @@ GitHub (частно, main) ──CI (checksPass)──▶ Render Blueprint (fra
 
 ## L. Предстоящи външни стъпки (не е незавършен код)
 
-1. Частно GitHub хранилище и remote; push на `main` (локален commit — виж M).
+1. ~~GitHub хранилище и push на `main`~~ — изпълнено (публично хранилище, виж N).
 2. Render: Blueprint от `render.yaml` (платени планове; цената се потвърждава в Render).
 3. Canonical HTTPS адрес → `APP_BASE_URL` (onrender адрес или собствен домейн; DNS — само ако решиш).
 4. VAPID ключове (генерират се локално), SMTP доставчик и credentials, `SMTP_FROM` (SPF/DKIM), `OWNER_NOTIFY_EMAIL`.
@@ -197,8 +197,7 @@ Build/E2E в основната папка отказват, докато `npm r
 
 **GitHub / Render (бъдеща последователност)**
 
-1. Прегледай локалния commit (`git log --stat`), създай частно хранилище в GitHub, после: `git remote add origin <URL>` и `git push -u origin main`.
-2. Изчакай зелен CI (`.github/workflows/ci.yml`).
+1. ~~Хранилище, push, зелен CI~~ — изпълнено (виж N). Следващите промени: commit → `git push` → изчакай зелен CI.
 3. Render → New → Blueprint (`docs/RENDER-SETUP.md` §6), gates остават `false`.
 4. Cutover по `docs/CUTOVER-AND-ROLLBACK.md`.
 
@@ -208,4 +207,18 @@ Build/E2E в основната папка отказват, докато `npm r
 
 - Кодът е готов за GitHub/Render; PostgreSQL runtime е реално проверен локално (тестове, production команди, пробен пренос на реалните данни — PASS).
 - Локалният сайт работи на http://localhost:3015 със същия owner акаунт; първият реален списък остава за пт 09.10.2026 08:00 от локалния worker.
-- Остават външни стойности/действия: GitHub хранилище и push, Render ресурси (платени), canonical HTTPS адрес, VAPID ключове, SMTP credentials и owner имейл, регистрация на телефона, финален export/импорт и включване на gates. Push до телефон и реален имейл не са проверени.
+- Остават външни стойности/действия: Render ресурси (платени), canonical HTTPS адрес, VAPID ключове, SMTP credentials и owner имейл, регистрация на телефона, финален export/импорт и включване на gates. Push до телефон и реален имейл не са проверени.
+
+---
+
+## N. GitHub и CI (09.10.2026)
+
+- Хранилище: https://github.com/PreslavBlazhev/bds-leadflow — **публично** (потвърден избор на собственика). `origin` е добавен (липсваше); нормален push, без force.
+- Преди push: проверка на всички файлове в commit-а за тайни (шаблони за ключове/token-и/private keys/DB URL с пароли) и сверка с реалните CRM стойности от работната база (имена, телефони, адреси, URL-и, идентификатори, owner hash). Намерен и премахнат: реален Google place ID на бизнес в `scripts/verify-xlsx-import.ts` и в `docs/REAL-DATA-IMPORT-REPORT.md` — поправен в локалния commit **преди** първия push, т.е. не е в публичната история. .env, бази, Excel, backup-и, export-и и `.tools` не са в Git. Примерните конфигурации са с placeholders; тестовите данни са синтетични.
+- Първите CI пускания паднаха; поправено:
+  1. **SIGTERM (реален проблем за Render):** новият Linux тест показа, че при SIGTERM към `npm run worker:start` npm умира от сигнала и worker-ът не спира чисто. После — че `/bin/sh -c` (dash) без `exec` също умира. Поправка: `render.yaml` startCommand = `exec node scripts/start-web.mjs` и `exec node --import tsx src/worker/index.ts` (един процес, без npm/tsx CLI обвивки); `npm run worker:start` е същата node команда.
+  2. E2E: на runner-а липсваше ffmpeg на Playwright (видеозапис) → стъпка `npx playwright install ffmpeg`.
+  3. Нестабилен тест: „4.9“ (ограничен рейтинг) се търсеше като подниз и съвпадаше случайно с timestamp `…54.967Z` → търси се като JSON стойност.
+- Зелен пуск: https://github.com/PreslavBlazhev/bds-leadflow/actions/runs/37900262572 (commit `c192a3a`): checks (schema check, typecheck, lint, unit 35/35, integration SQLite 79 + 1 skip, PostgreSQL 18 79 + 1 skip, build, render.yaml schema) и e2e 15/15.
+- SIGTERM тест (`tests/integration/production.test.ts`, само POSIX): чете точната startCommand на worker-а от `render.yaml`, пуска я през `/bin/sh -c`, праща SIGTERM **само** на горния процес → изход 0 под 30 s, в лога „SIGTERM: спира приемането на нова работа“, heartbeat `stopped`, lease-ът е освободен. PASS в CI срещу SQLite и PostgreSQL. Как точно Render стартира командата (shell, process group) не е проверено — тестът покрива по-лошия случай (сигнал само към shell-а).
+- Render: нищо не е създадено; `autoDeployTrigger: checksPass` ще важи, когато Blueprint-ът бъде създаден.

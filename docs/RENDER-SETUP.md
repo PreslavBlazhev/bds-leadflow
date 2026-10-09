@@ -1,6 +1,6 @@
 # Render: настройка (бъдеща стъпка — нищо не е създадено)
 
-Статус към 09.10.2026: `render.yaml` е **локално валидиран** срещу официалната JSON schema (`https://render.com/schema/render.yaml.json`, изтеглена на 08.10.2026) с `node scripts/validate-render-yaml.mjs`. Не е създаден нито един Render ресурс, няма deploy и няма GitHub remote. Локалната schema проверка не доказва, че услугите ще стартират в Render.
+Статус към 09.10.2026: `render.yaml` е **локално валидиран** срещу официалната JSON schema (`https://render.com/schema/render.yaml.json`, изтеглена на 08.10.2026) с `node scripts/validate-render-yaml.mjs`. Не е създаден нито един Render ресурс и няма deploy; кодът е в https://github.com/PreslavBlazhev/bds-leadflow (CI зелен). Локалната schema проверка не доказва, че услугите ще стартират в Render.
 
 ## 1. Архитектура (render.yaml)
 
@@ -54,7 +54,7 @@
 
 ## 6. Първо създаване (бъдеща последователност)
 
-1. Частно GitHub хранилище, push на `main` (виж `docs/PRODUCTION-PREP-REPORT.md`, раздел M).
+1. GitHub хранилище и push — изпълнено (`docs/PRODUCTION-PREP-REPORT.md`, раздел N).
 2. Render Dashboard → New → Blueprint → хранилището → попълни `sync: false` стойностите (APP_BASE_URL може първо да е onrender адресът; VAPID ключовете се генерират локално с `npx web-push generate-vapid-keys`, частният — само в worker-а).
 3. Изчакай web/worker/db. Провери `/api/health` = 200, `/api/ready` = 503 (празна база — очаквано) и Health в логовете на worker-а: `waiting_data`.
 4. Продължи с `docs/CUTOVER-AND-ROLLBACK.md`.
