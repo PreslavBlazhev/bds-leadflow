@@ -151,7 +151,7 @@ describe("конкурентно публикуване: два worker проц�
 
 describe("worker процес (production команда)", () => {
   function startWorker(url: string, extraEnv: Record<string, string> = {}): ChildProcess {
-    const p = spawn(process.execPath, [TSX, path.resolve("src/worker/index.ts")], {
+    const p = spawn(process.execPath, ["--import", "tsx", path.resolve("src/worker/index.ts")], {
       env: { ...process.env, APP_ENV: "local", APP_MODE: "demo", DATABASE_URL: url, WORKER_TICK_SECONDS: "5", LEADFLOW_ENV_FILE: ".env.does-not-exist", ...extraEnv },
       stdio: ["ignore", "pipe", "pipe", "ipc"],
     });
@@ -194,11 +194,21 @@ describe("worker процес (production команда)", () => {
     expect((await workerHealth(ctx.db, 180)).status).toBe("stale");
   }, 120_000);
 
-  // Render пуска startCommand (`npm run worker:start`) и праща SIGTERM на този процес. Сигналът трябва да мине
-  // npm → sh → tsx → worker; иначе worker-ът би бил убит без освобождаване на lease-овете. Само POSIX (CI на Linux).
-  it.skipIf(process.platform === "win32")("Linux: SIGTERM само към `npm run worker:start` достига worker-а → чисто спиране, изход 0", async () => {
+  // Render праща SIGTERM на процеса от startCommand. npm не предава сигнала (сам умира от него), затова web и
+  // worker се пускат директно с node. Тестът пуска точната команда от render.yaml през /bin/sh -c и праща SIGTERM
+  // само на горния процес (не на process group). Само POSIX (CI на Linux).
+  const renderStart = (service: string) => {
+    const yaml = fs.readFileSync("render.yaml", "utf8");
+    const block = yaml.slice(yaml.indexOf(`name: ${service}`));
+    return (/startCommand: (.+)/.exec(block)?.[1] ?? "").trim();
+  };
+  it("render.yaml: web и worker стартират директно с node (без npm обвивка)", () => {
+    expect(renderStart("bds-leadflow-web")).toBe("node scripts/start-web.mjs");
+    expect(renderStart("bds-leadflow-worker")).toBe("node --import tsx src/worker/index.ts");
+  });
+  it.skipIf(process.platform === "win32")("Linux: SIGTERM към startCommand на worker-а от render.yaml → чисто спиране, изход 0", async () => {
     ctx = await testDb({ now: new Date().toISOString(), settings: { paused: true } });
-    const p = spawn("npm", ["run", "--silent", "worker:start"], {
+    const p = spawn("/bin/sh", ["-c", renderStart("bds-leadflow-worker")], {
       env: { ...process.env, APP_ENV: "local", APP_MODE: "demo", DATABASE_URL: ctx.url, WORKER_TICK_SECONDS: "5", LEADFLOW_ENV_FILE: ".env.does-not-exist" },
       stdio: ["ignore", "pipe", "pipe"],
     });

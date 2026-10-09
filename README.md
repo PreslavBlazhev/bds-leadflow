@@ -53,7 +53,7 @@ Fail-closed: при създаване базата записва режима 
 | `npm run demo:next-day` | Само в demo: премества demo часовника с +1 ден и публикува списък. Без реални доставки |
 | `npm run backup` | Консистентен backup (`VACUUM INTO`) в `backups/` + автоматична проверка чрез възстановяване във временна база |
 | `npm run build` / `npm run start` / `npm run worker:start` | Production-like локален тест (start на 127.0.0.1:3015) |
-| `npm run start:web` | Production start на web (Render): `next start` на 0.0.0.0:$PORT. Конфигурацията се проверява при старт |
+| `npm run start:web` | Production start на web (Render пуска директно `node scripts/start-web.mjs`, без npm, за да стига SIGTERM): `next start` на 0.0.0.0:$PORT. Конфигурацията се проверява при старт |
 | `npm run db:generate` | Генерира двата Prisma клиента (SQLite и PostgreSQL); изпълнява се и от `npm ci` |
 | `npm run db:pg:schema` / `db:pg:schema:check` | Генерира / проверява `prisma/postgresql/schema.prisma` от `prisma/schema.prisma` |
 | `npm run db:deploy` / `db:status` | PostgreSQL миграции (`migrate deploy`; Render preDeploy) / статус. Никога dev/reset |

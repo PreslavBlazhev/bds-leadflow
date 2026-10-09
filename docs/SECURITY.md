@@ -28,7 +28,7 @@
 - Production конфигурацията се валидира при старт (web: `src/instrumentation-node.ts`; worker): без PostgreSQL, без https canonical адрес или в demo режим процесът спира. Съобщенията съдържат имената на променливите, не стойностите. `sslaccept=accept_invalid_certs` е забранено.
 - `DATABASE_URL` за миграционните скриптове е само в env (`TARGET_DATABASE_URL`), паролата се маскира в изхода.
 - Security headers: `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy`. Няма analytics, пиксели или trackers.
-- Локално слуша само на `127.0.0.1`. Production (`npm run start:web`) слуша на `0.0.0.0:$PORT` зад HTTPS на Render.
+- Локално слуша само на `127.0.0.1`. Production (`node scripts/start-web.mjs`) слуша на `0.0.0.0:$PORT` зад HTTPS на Render.
 - Публична разписка от service worker (`POST /api/push/receipt`): изисква Origin и еднократен token от криптирания payload (в DB е sha256); отговорът не издава дали token-ът съществува.
 
 ## SSRF (live website audit — изключен по подразбиране)

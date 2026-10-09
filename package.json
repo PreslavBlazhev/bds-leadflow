@@ -14,7 +14,7 @@
     "prestart": "node scripts/guard-no-dev.mjs",
     "start": "next start -H 127.0.0.1 -p 3015",
     "start:web": "node scripts/start-web.mjs",
-    "worker:start": "tsx src/worker/index.ts",
+    "worker:start": "node --import tsx src/worker/index.ts",
     "setup:demo": "tsx scripts/setup-demo.ts",
     "owner:create": "tsx scripts/owner-create.ts",
     "db:migrate": "tsx scripts/db-migrate.ts",

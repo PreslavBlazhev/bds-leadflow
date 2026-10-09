@@ -10,7 +10,7 @@ import { beat, pruneHeartbeats, releaseLeases, type WorkerState } from "@/domain
 import { buildTransports, discoveryFor, workerCtx } from "./runtime";
 
 /**
- * Отделен scheduler/outbox worker (локално: npm run worker:dev; Render Background Worker: npm run worker:start).
+ * Отделен scheduler/outbox worker (локално: npm run worker:dev; Render Background Worker: node --import tsx src/worker/index.ts — без npm, за да стига SIGTERM).
  * Един постоянно работещ процес; при рестарт всичко се възстановява от базата (JobRun, outbox, списъци).
  *  - Не обработва нищо, докато приложените миграции не съвпадат с кода (schema readiness) и базата не е инициализирана.
  *  - SCHEDULER_ENABLED / DELIVERIES_ENABLED (production gates) — изключени по подразбиране в production.
