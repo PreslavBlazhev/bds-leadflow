@@ -6,8 +6,8 @@
 
 | Ресурс | Тип / план | Команди | Бележки |
 | --- | --- | --- | --- |
-| `bds-leadflow-web` | web, node, `0.5c-512mb`, frankfurt | build `npm ci --include=dev && npm run build`; preDeploy `npm run db:deploy`; start `node scripts/start-web.mjs` (без npm — SIGTERM трябва да стигне до процеса) | health `/api/health`; `next start` на `0.0.0.0:$PORT`; graceful shutdown 30 s |
-| `bds-leadflow-worker` | Background Worker, node, `0.5c-512mb`, frankfurt | build `npm ci --include=dev`; start `node --import tsx src/worker/index.ts` (без npm; SIGTERM тест в CI на Linux) | един постоянен процес; SIGTERM → изчаква tick-а, освобождава lease-овете; 60 s |
+| `bds-leadflow-web` | web, node, `0.5c-512mb`, frankfurt | build `npm ci --include=dev && npm run build`; preDeploy `npm run db:deploy`; start `exec node scripts/start-web.mjs` (без npm, с exec — SIGTERM трябва да стигне до процеса) | health `/api/health`; `next start` на `0.0.0.0:$PORT`; graceful shutdown 30 s |
+| `bds-leadflow-worker` | Background Worker, node, `0.5c-512mb`, frankfurt | build `npm ci --include=dev`; start `exec node --import tsx src/worker/index.ts` (без npm, с exec; SIGTERM тест в CI на Linux) | един постоянен процес; SIGTERM → изчаква tick-а, освобождава lease-овете; 60 s |
 | `bds-leadflow-db` | PostgreSQL 18, `0.1c-256mb`, 5 GB, frankfurt | — | `ipAllowList: []` (само вътрешни връзки); платена → PITR и logical exports от Render |
 | env група `leadflow-shared` | — | — | APP_ENV, APP_MODE, APP_BASE_URL, публичния VAPID ключ, DELIVERIES_ENABLED, NOTIFY_DRY_RUN, WORKER_STALE_SECONDS — **една** стойност за двете услуги |
 

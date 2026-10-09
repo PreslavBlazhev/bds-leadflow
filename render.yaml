@@ -40,8 +40,9 @@ services:
     buildCommand: npm ci --include=dev && npm run build
     # Една стъпка за schema миграциите преди новата версия да поеме трафика (само migrate deploy; никога dev/reset, никога CRM данни).
     preDeployCommand: npm run db:deploy
-    # Директно node (без npm): SIGTERM от Render стига до процеса, който го предава на next start (npm умира от сигнала).
-    startCommand: node scripts/start-web.mjs
+    # exec + директно node (без npm): shell-ът се заменя с node и SIGTERM от Render стига до процеса, който го предава
+    # на next start (npm и dash `sh -c` без exec умират от сигнала — проверено в CI на Linux).
+    startCommand: exec node scripts/start-web.mjs
     healthCheckPath: /api/health
     autoDeployTrigger: checksPass
     maxShutdownDelaySeconds: 30
@@ -71,8 +72,8 @@ services:
     branch: main
     # tsx (devDependency) изпълнява worker-а; Prisma клиентите се генерират в postinstall.
     buildCommand: npm ci --include=dev
-    # Директно node (без npm/tsx CLI обвивки): SIGTERM стига до worker-а → чисто спиране (тест в CI на Linux).
-    startCommand: node --import tsx src/worker/index.ts
+    # exec + директно node (без npm/tsx CLI обвивки): SIGTERM стига до worker-а → чисто спиране (тест в CI на Linux).
+    startCommand: exec node --import tsx src/worker/index.ts
     autoDeployTrigger: checksPass
     # Worker-ът изчаква текущия tick до 25 s и освобождава lease-овете.
     maxShutdownDelaySeconds: 60

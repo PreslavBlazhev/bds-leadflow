@@ -194,8 +194,8 @@ describe("worker процес (production команда)", () => {
     expect((await workerHealth(ctx.db, 180)).status).toBe("stale");
   }, 120_000);
 
-  // Render праща SIGTERM на процеса от startCommand. npm не предава сигнала (сам умира от него), затова web и
-  // worker се пускат директно с node. Тестът пуска точната команда от render.yaml през /bin/sh -c и праща SIGTERM
+  // Render праща SIGTERM на процеса от startCommand. npm и `sh -c` (dash) без exec не предават сигнала (умират от него),
+  // затова startCommand е `exec node …`. Тестът пуска точната команда от render.yaml през /bin/sh -c и праща SIGTERM
   // само на горния процес (не на process group). Само POSIX (CI на Linux).
   const renderStart = (service: string) => {
     const yaml = fs.readFileSync("render.yaml", "utf8");
@@ -203,8 +203,8 @@ describe("worker процес (production команда)", () => {
     return (/startCommand: (.+)/.exec(block)?.[1] ?? "").trim();
   };
   it("render.yaml: web и worker стартират директно с node (без npm обвивка)", () => {
-    expect(renderStart("bds-leadflow-web")).toBe("node scripts/start-web.mjs");
-    expect(renderStart("bds-leadflow-worker")).toBe("node --import tsx src/worker/index.ts");
+    expect(renderStart("bds-leadflow-web")).toBe("exec node scripts/start-web.mjs");
+    expect(renderStart("bds-leadflow-worker")).toBe("exec node --import tsx src/worker/index.ts");
   });
   it.skipIf(process.platform === "win32")("Linux: SIGTERM към startCommand на worker-а от render.yaml → чисто спиране, изход 0", async () => {
     ctx = await testDb({ now: new Date().toISOString(), settings: { paused: true } });
