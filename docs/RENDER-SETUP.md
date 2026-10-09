@@ -9,7 +9,7 @@
 | `bds-leadflow-web` | web, node, `0.5c-512mb`, frankfurt | build `npm ci --include=dev && npm run build`; preDeploy `npm run db:deploy`; start `exec node scripts/start-web.mjs` (без npm, с exec — SIGTERM трябва да стигне до процеса) | health `/api/health`; `next start` на `0.0.0.0:$PORT`; graceful shutdown 30 s |
 | `bds-leadflow-worker` | Background Worker, node, `0.5c-512mb`, frankfurt | build `npm ci --include=dev`; start `exec node --import tsx src/worker/index.ts` (без npm, с exec; SIGTERM тест в CI на Linux) | един постоянен процес; SIGTERM → изчаква tick-а, освобождава lease-овете; 60 s |
 | `bds-leadflow-db` | PostgreSQL 18, `0.1c-256mb`, 5 GB, frankfurt | — | `ipAllowList: []` (само вътрешни връзки); платена → PITR и logical exports от Render |
-| env група `leadflow-shared` | — | — | APP_ENV, APP_MODE, APP_BASE_URL, публичния VAPID ключ, DELIVERIES_ENABLED, NOTIFY_DRY_RUN, WORKER_STALE_SECONDS — **една** стойност за двете услуги |
+| env група `leadflow-shared` | — | — | само фиксирани стойности: APP_ENV, APP_MODE, DELIVERIES_ENABLED, NOTIFY_DRY_RUN, WORKER_STALE_SECONDS — **една** стойност за двете услуги. Без `sync: false` (виж §3) |
 
 - Плановете са от текущия enum на Blueprint schema (новите `0.5c-512mb`/`0.1c-256mb`; старото `starter` още се приема, но документацията ползва новите ID). Цените се проверяват в Render при създаването — не са потвърдени тук.
 - Node: `.node-version` = `24.21.0` (Render: `NODE_VERSION` > `.node-version` > `.nvmrc` > engines). Не задавай `NODE_VERSION`, за да няма две места.
@@ -27,8 +27,26 @@
 
 Пълен списък с тип, secret/public и обхват: `.env.production.example`.
 
-- Тайните са само `sync: false` → Render ги пита **при първото създаване** на Blueprint-а; после се сменят от Dashboard. Стойностите не са в Git, логове, отчети или чат.
-- Общите стойности (APP_BASE_URL, публичният VAPID ключ) са в групата `leadflow-shared`. Частният VAPID ключ и SMTP са **само** в worker-а. **Не** използвай `generateValue` за общ secret — всяка услуга получава различна генерирана стойност.
+- Тайните и стойностите, известни едва при създаването, са `sync: false` → Render ги пита **при първото създаване** на Blueprint-а; после се сменят от Dashboard на съответната услуга. Стойностите не са в Git, логове, отчети или чат.
+- **`sync: false` е само на ниво услуга.** Render игнорира `sync: false` в `envVarGroups` (стойността никога не се пита), затова групата `leadflow-shared` съдържа само фиксирани `value`. `node scripts/validate-render-yaml.mjs` (и CI) отказва `sync`, `fromDatabase`, `fromService`, `fromGroup` и `generateValue` в групата, ключ, който е едновременно в групата и в услуга, и `APP_BASE_URL`/`NEXT_PUBLIC_VAPID_PUBLIC_KEY` без `sync: false` в **двете** услуги; при всяко пускане прави и самопроверка, че `sync: false` в група наистина се отказва.
+- **`APP_BASE_URL` и `NEXT_PUBLIC_VAPID_PUBLIC_KEY` са декларирани поотделно в web и в worker.** При създаването въведи **ЕДНАКЪВ** `APP_BASE_URL` в двете услуги и **ЕДНАКЪВ** публичен VAPID ключ в двете услуги (или остави ключа празен и в двете). При всяка следваща смяна — смени го и в двете (Dashboard → услугата → Environment). Разминаване: различен APP_BASE_URL → грешни линкове в имейла; различен публичен ключ → абонаментите на телефона не съвпадат с ключа, с който worker-ът изпраща.
+- Частният VAPID ключ и SMTP са **само** в worker-а. **Не** използвай `generateValue` за общ secret — всяка услуга получава различна генерирана стойност.
+
+### Какво е нужно за първи старт и какво — по-късно
+
+Първи старт = `SCHEDULER_ENABLED=false`, `DELIVERIES_ENABLED=false` (така е в `render.yaml`). Проверено с тест (`tests/integration/production.test.ts`, „първи старт на Render“): фиксираните стойности от `render.yaml` + `APP_BASE_URL` стартират, а празните стойности за известията не пречат.
+
+| Стойност | Услуга | Първи старт | Бележка |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | web, worker | задава се автоматично (`fromDatabase`) | вътрешният URL |
+| APP_ENV, APP_MODE, DELIVERIES_ENABLED, NOTIFY_DRY_RUN, WORKER_STALE_SECONDS (група); SCHEDULER_ENABLED, WORKER_TICK_SECONDS (worker); TRUSTED_PROXY_HOPS, SESSION_TTL_HOURS, ALLOW_REAL_TEST_DELIVERY (web) | — | фиксирани в `render.yaml` | нищо не се въвежда |
+| `APP_BASE_URL` | web **и** worker — еднакъв | **задължителен** | без него (или без https) и двата процеса отказват да стартират. Ако адресът още не е известен: `https://bds-leadflow-web.onrender.com`; ако Render даде друг адрес, смени го в двете услуги |
+| `ALLOWED_ORIGINS` | web | празно | само при собствен домейн + onrender адрес |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | web **и** worker — еднакъв | празно | при настройването на известията |
+| `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | worker | празно | при настройването на известията |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `OWNER_NOTIFY_EMAIL` | worker | празно | при настройването на резервния имейл |
+
+Ако формата на Render не позволи празна стойност, остави полето както Render допуска и добави стойността по-късно от Dashboard — при `DELIVERIES_ENABLED=false` не се ползва. Пример за всичко: `.env.production.example`.
 - Сесиите нямат споделен secret: случаен token в HttpOnly cookie, в базата само sha256. Затова няма SESSION_SECRET.
 - `APP_BASE_URL` = canonical HTTPS origin (напр. `https://bds-leadflow-web.onrender.com` или собствен домейн). Разрешените Origin са само той + `ALLOWED_ORIGINS`; Host header не се ползва в production.
 - `NEXT_PUBLIC_VAPID_PUBLIC_KEY` се чете на сървъра при заявка (не е вграден в bundle-а), но е публичен по предназначение. Никакви други `NEXT_PUBLIC_` стойности.
@@ -55,6 +73,6 @@
 ## 6. Първо създаване (бъдеща последователност)
 
 1. GitHub хранилище и push — изпълнено (`docs/PRODUCTION-PREP-REPORT.md`, раздел N).
-2. Render Dashboard → New → Blueprint → хранилището → попълни `sync: false` стойностите (APP_BASE_URL може първо да е onrender адресът; VAPID ключовете се генерират локално с `npx web-push generate-vapid-keys`, частният — само в worker-а).
+2. Render Dashboard → New → Blueprint → хранилището → попълни `sync: false` стойностите по таблицата в §3: за първи старт само `APP_BASE_URL` — **еднакъв** в web и worker. Известията (VAPID ключовете се генерират локално с `npx web-push generate-vapid-keys`; публичният — **еднакъв** в web и worker, частният — само в worker-а; SMTP) могат да се добавят по-късно.
 3. Изчакай web/worker/db. Провери `/api/health` = 200, `/api/ready` = 503 (празна база — очаквано) и Health в логовете на worker-а: `waiting_data`.
 4. Продължи с `docs/CUTOVER-AND-ROLLBACK.md`.

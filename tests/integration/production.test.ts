@@ -400,6 +400,20 @@ describe("production конфигурация и достъп", () => {
     }
   }
 
+  // docs/RENDER-SETUP.md §3: за първи старт (scheduler и deliveries изключени) е нужен само APP_BASE_URL (+ DATABASE_URL от
+  // Render); VAPID/SMTP/OWNER_NOTIFY_EMAIL/ALLOWED_ORIGINS могат да са празни и се добавят при настройването на известията.
+  it("първи старт на Render: фиксираните стойности от render.yaml + APP_BASE_URL; празни стойности за известията", () => {
+    const fixed = { APP_ENV: "production", APP_MODE: "real", DELIVERIES_ENABLED: "false", NOTIFY_DRY_RUN: "false", WORKER_STALE_SECONDS: "180", SCHEDULER_ENABLED: "false", WORKER_TICK_SECONDS: "30", TRUSTED_PROXY_HOPS: "1", SESSION_TTL_HOURS: "168", ALLOW_REAL_TEST_DELIVERY: "false", RENDER: "true", DATABASE_URL: "postgresql://u:p@dpg-abc-a/bds_leadflow" };
+    const empty = Object.fromEntries(["NEXT_PUBLIC_VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT", "SMTP_HOST", "SMTP_PORT", "SMTP_SECURE", "SMTP_USER", "SMTP_PASS", "SMTP_FROM", "OWNER_NOTIFY_EMAIL", "ALLOWED_ORIGINS"].map((k) => [k, ""]));
+    const e = envWith({ ...fixed, ...empty, APP_BASE_URL: "https://bds-leadflow-web.onrender.com" });
+    expect(schedulerEnabled(e)).toBe(false);
+    expect(deliveriesEnabled(e)).toBe(false);
+    expect(e.NEXT_PUBLIC_VAPID_PUBLIC_KEY).toBeUndefined();
+    expect(e.SMTP_HOST).toBeUndefined();
+    // без APP_BASE_URL процесът отказва да стартира (и web, и worker валидират конфигурацията при старт)
+    expect(() => envWith({ ...fixed, ...empty })).toThrow(/https/);
+  });
+
   it("production изисква PostgreSQL, real, https canonical; без празна SQLite, без изключена проверка на сертификата", () => {
     const ok = envWith(base);
     expect(schedulerEnabled(ok)).toBe(false); // gates са изключени по подразбиране в production

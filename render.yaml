@@ -3,8 +3,11 @@
 # В този етап НЕ е създаден нито един Render ресурс. Плановете са платени: web/worker 0.5c-512mb, база 0.1c-256mb
 # (preDeployCommand изисква платена услуга; безплатната база изтича).
 #
-# Тайни: само `sync: false` — Render ги пита при първото създаване на Blueprint-а; стойностите не са в Git.
-# Общите стойности за web и worker са в env групата `leadflow-shared` (ЕДНА стойност за двете услуги).
+# Тайни и стойности, известни едва при създаването: само `sync: false` НА НИВО УСЛУГА — Render ги пита при първото
+# създаване на Blueprint-а; стойностите не са в Git. В envVarGroups `sync: false` НЕ се поддържа (Render го игнорира),
+# затова групата `leadflow-shared` съдържа само фиксирани `value` (scripts/validate-render-yaml.mjs отказва друго).
+# APP_BASE_URL и NEXT_PUBLIC_VAPID_PUBLIC_KEY са декларирани поотделно в web и worker: при създаването въведи
+# ЕДНАКВА стойност в двете услуги (и при всяка следваща смяна — в двете).
 # Не използвай `generateValue` за общи тайни: всяка услуга би получила РАЗЛИЧНА генерирана стойност.
 #
 # Production gates (SCHEDULER_ENABLED, DELIVERIES_ENABLED) са "false" до проверен cutover — docs/CUTOVER-AND-ROLLBACK.md.
@@ -16,12 +19,6 @@ envVarGroups:
         value: production
       - key: APP_MODE
         value: real
-      # Canonical HTTPS адрес (само origin, без път), напр. https://bds-leadflow-web.onrender.com или собствен домейн.
-      - key: APP_BASE_URL
-        sync: false
-      # Публичен по предназначение VAPID ключ — ЕДНАКЪВ в web (абониране) и worker (изпращане).
-      - key: NEXT_PUBLIC_VAPID_PUBLIC_KEY
-        sync: false
       - key: DELIVERIES_ENABLED
         value: "false"
       - key: NOTIFY_DRY_RUN
@@ -52,6 +49,14 @@ services:
         fromDatabase:
           name: bds-leadflow-db
           property: connectionString
+      # Canonical HTTPS адрес (само origin, без път), напр. https://bds-leadflow-web.onrender.com или собствен домейн.
+      # Задължителен за старт (production отказва без https). ЕДНАКЪВ с APP_BASE_URL на worker-а.
+      - key: APP_BASE_URL
+        sync: false
+      # Публичен по предназначение VAPID ключ (абониране в браузъра). ЕДНАКЪВ с този на worker-а.
+      # Не е нужен за първи старт — може да се остави празен и да се добави при настройването на известията.
+      - key: NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        sync: false
       # Render добавя точно един X-Forwarded-For hop пред услугата.
       - key: TRUSTED_PROXY_HOPS
         value: "1"
@@ -87,6 +92,13 @@ services:
         value: "false"
       - key: WORKER_TICK_SECONDS
         value: "30"
+      # ЕДНАКЪВ с APP_BASE_URL на web (линкове в имейла). Задължителен за старт.
+      - key: APP_BASE_URL
+        sync: false
+      # ЕДНАКЪВ с публичния ключ на web (изпращане към абонаментите). Не е нужен за първи старт.
+      - key: NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        sync: false
+      # Следващите са за известията — не са нужни за първи старт (DELIVERIES_ENABLED=false); могат да останат празни.
       - key: VAPID_PRIVATE_KEY
         sync: false
       - key: VAPID_SUBJECT

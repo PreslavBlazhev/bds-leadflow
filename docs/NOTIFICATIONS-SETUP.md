@@ -38,7 +38,7 @@
 
 ## Конфигурация (worker, освен публичния ключ)
 
-`NEXT_PUBLIC_VAPID_PUBLIC_KEY` (група — същият в web и worker), `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`mailto:`), `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `OWNER_NOTIFY_EMAIL`. Gates: `DELIVERIES_ENABLED`, `NOTIFY_DRY_RUN`, `ALLOW_REAL_TEST_DELIVERY` (web). Ключове: `npx web-push generate-vapid-keys` локално; смяна на ключа изисква ново „Активирай“ на всички устройства.
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY` (sync:false в web **и** worker — въвежда се ЕДНАКЪВ в двете; не е в env групата, защото Render игнорира sync:false там), `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`mailto:`), `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `OWNER_NOTIFY_EMAIL`. Gates: `DELIVERIES_ENABLED`, `NOTIFY_DRY_RUN`, `ALLOW_REAL_TEST_DELIVERY` (web). Ключове: `npx web-push generate-vapid-keys` локално; смяна на ключа изисква ново „Активирай“ на всички устройства.
 
 ## Какво е проверено / какво остава
 
