@@ -134,7 +134,9 @@ describe("T41 ограничено съдържание от доставчик"
     expect(b.identifiers.map((i) => i.type)).toContain("PLACE_ID");
     const all = JSON.stringify(await ctx.db.business.findMany({ include: { identifiers: true, evidence: true } })) + JSON.stringify(await ctx.db.auditLog.findMany());
     expect(all).not.toContain("886123456");
-    expect(all).not.toContain("4.9");
+    // като стойност (число или низ), не като подниз — timestamp/ID като „…54.967Z“ съдържат „4.9“ случайно
+    expect(all).not.toMatch(/[:,[]"?4\.9"?[,}\]]/);
+    expect(all).not.toMatch(/[:,[]"?321"?[,}\]]/);
     const csv = await exportLeadsCsv(ctx);
     expect(csv).not.toContain("886123456");
   });
